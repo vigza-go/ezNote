@@ -1,0 +1,13 @@
+{
+  "name": "noteonline",
+  "version": "1.0.0",
+  "description": "轻量级在线笔记应用",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["note", "editor", "lightweight"],
+  "author": "",
+  "license": "MIT"
+}
