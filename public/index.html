@@ -143,6 +143,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 8px;
         }
 
         .editor-title-input {
@@ -167,11 +168,20 @@
             cursor: pointer;
             color: var(--text-secondary);
             transition: all 0.15s ease;
+            flex-shrink: 0;
         }
 
         .btn-icon:hover {
             background: var(--bg-hover);
             color: var(--danger-color);
+        }
+
+        .btn-back {
+            display: none;
+        }
+
+        .btn-back:hover {
+            color: var(--accent-color);
         }
 
         .editor-content {
@@ -225,7 +235,8 @@
         .save-indicator {
             font-size: 12px;
             color: var(--text-muted);
-            margin-right: 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .save-indicator.saving {
@@ -261,23 +272,87 @@
             border-color: var(--accent-color);
         }
 
+        mark {
+            background: #fff176;
+            color: inherit;
+            border-radius: 2px;
+            padding: 0 1px;
+        }
+
+        /* 删除撤销 Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 14px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            z-index: 1000;
+            animation: slideUp 0.2s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        .toast-undo {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.5);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.15s;
+        }
+
+        .toast-undo:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
         @media (max-width: 768px) {
             :root {
                 --sidebar-width: 100%;
             }
-            
+
             .app {
                 flex-direction: column;
             }
-            
+
             .sidebar {
                 width: 100%;
                 height: auto;
-                max-height: 40vh;
+                max-height: 100vh;
                 border-right: none;
                 border-bottom: 1px solid var(--border-color);
+                flex-shrink: 0;
             }
-            
+
+            /* 移动端选中笔记后隐藏侧栏、显示编辑区 */
+            .app.editor-active .sidebar {
+                display: none;
+            }
+
+            .app.editor-active .editor-container {
+                display: flex;
+            }
+
+            .editor-container {
+                display: none;
+            }
+
+            .btn-back {
+                display: inline-flex;
+            }
+
             .note-item-preview {
                 display: none;
             }
@@ -285,7 +360,7 @@
     </style>
 </head>
 <body>
-    <div class="app">
+    <div class="app" id="app">
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h1 class="app-title">轻记</h1>
@@ -308,8 +383,13 @@
             </div>
             <div class="editor-wrapper" id="editorWrapper" style="display: none; flex-direction: column; flex: 1;">
                 <div class="editor-header">
-                    <span class="save-indicator" id="saveIndicator"></span>
+                    <button class="btn-icon btn-back" id="backBtn" title="返回列表">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M15 18l-6-6 6-6"/>
+                        </svg>
+                    </button>
                     <input type="text" class="editor-title-input" id="noteTitle" placeholder="无标题笔记">
+                    <span class="save-indicator" id="saveIndicator"></span>
                     <button class="btn-icon" id="deleteNoteBtn" title="删除笔记">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -329,8 +409,10 @@
         let currentNoteId = null;
         let saveTimeout = null;
         let searchQuery = '';
+        let pendingDelete = null; // { note, timer, toastEl }
 
         const elements = {
+            app: document.getElementById('app'),
             notesList: document.getElementById('notesList'),
             newNoteBtn: document.getElementById('newNoteBtn'),
             emptyState: document.getElementById('emptyState'),
@@ -339,8 +421,24 @@
             noteContent: document.getElementById('noteContent'),
             deleteNoteBtn: document.getElementById('deleteNoteBtn'),
             saveIndicator: document.getElementById('saveIndicator'),
-            searchInput: document.getElementById('searchInput')
+            searchInput: document.getElementById('searchInput'),
+            backBtn: document.getElementById('backBtn')
         };
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function highlightText(text, query) {
+            const escaped = escapeHtml(text);
+            if (!query) return escaped;
+            const escapedQuery = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return escaped.replace(new RegExp(escapedQuery, 'gi'), m => `<mark>${m}</mark>`);
+        }
 
         async function fetchNotes() {
             try {
@@ -356,25 +454,25 @@
             let filteredNotes = notes;
             if (searchQuery) {
                 const q = searchQuery.toLowerCase();
-                filteredNotes = notes.filter(n => 
-                    n.title.toLowerCase().includes(q) || 
+                filteredNotes = notes.filter(n =>
+                    n.title.toLowerCase().includes(q) ||
                     n.content.toLowerCase().includes(q)
                 );
             }
 
             if (filteredNotes.length === 0) {
-                elements.notesList.innerHTML = '<div class="sidebar-empty">' + 
+                elements.notesList.innerHTML = '<div class="sidebar-empty">' +
                     (searchQuery ? '没有找到匹配的笔记' : '暂无笔记，点击上方创建') + '</div>';
                 return;
             }
 
             filteredNotes.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-            
+
             elements.notesList.innerHTML = filteredNotes.map(note => `
-                <div class="note-item ${note.id === currentNoteId ? 'active' : ''}" data-id="${note.id}">
-                    <div class="note-item-title">${note.title || '无标题笔记'}</div>
-                    <div class="note-item-date">${formatDate(note.updatedAt)}</div>
-                    <div class="note-item-preview">${note.content.substring(0, 50) || '空笔记'}</div>
+                <div class="note-item ${note.id === currentNoteId ? 'active' : ''}" data-id="${escapeHtml(note.id)}">
+                    <div class="note-item-title">${highlightText(note.title || '无标题笔记', searchQuery)}</div>
+                    <div class="note-item-date">${escapeHtml(formatDate(note.updatedAt))}</div>
+                    <div class="note-item-preview">${highlightText(note.content.substring(0, 60) || '空笔记', searchQuery)}</div>
                 </div>
             `).join('');
 
@@ -387,27 +485,37 @@
             const date = new Date(dateStr);
             const now = new Date();
             const diff = now - date;
-            
+
             if (diff < 60000) return '刚刚';
             if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
             if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
             if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`;
-            
+
             return date.toLocaleDateString('zh-CN');
         }
 
         function selectNote(id) {
             currentNoteId = id;
             const note = notes.find(n => n.id === id);
-            
             if (!note) return;
-            
+
             elements.emptyState.style.display = 'none';
             elements.editorWrapper.style.display = 'flex';
-            
+
             elements.noteTitle.value = note.title;
             elements.noteContent.value = note.content;
-            
+
+            // 移动端：选中笔记后切换到编辑视图
+            elements.app.classList.add('editor-active');
+
+            renderNotesList();
+        }
+
+        function goBackToList() {
+            currentNoteId = null;
+            elements.app.classList.remove('editor-active');
+            elements.editorWrapper.style.display = 'none';
+            elements.emptyState.style.display = 'flex';
             renderNotesList();
         }
 
@@ -416,10 +524,7 @@
                 const res = await fetch(`${API_BASE}/api/notes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: '',
-                        content: ''
-                    })
+                    body: JSON.stringify({ title: '', content: '' })
                 });
                 const newNote = await res.json();
                 notes.unshift(newNote);
@@ -432,7 +537,6 @@
 
         async function saveNote() {
             if (!currentNoteId) return;
-            
             const note = notes.find(n => n.id === currentNoteId);
             if (!note) return;
 
@@ -455,7 +559,7 @@
 
                 elements.saveIndicator.textContent = '已保存';
                 elements.saveIndicator.className = 'save-indicator saved';
-                
+
                 setTimeout(() => {
                     if (elements.saveIndicator.textContent === '已保存') {
                         elements.saveIndicator.textContent = '';
@@ -475,30 +579,58 @@
             saveTimeout = setTimeout(saveNote, 500);
         }
 
-        async function deleteNote() {
-            if (!currentNoteId) return;
-            
-            if (!confirm('确定要删除这条笔记吗？')) return;
-
-            try {
-                await fetch(`${API_BASE}/api/notes/${currentNoteId}`, {
-                    method: 'DELETE'
-                });
-                
-                notes = notes.filter(n => n.id !== currentNoteId);
-                currentNoteId = null;
-                
-                elements.editorWrapper.style.display = 'none';
-                elements.emptyState.style.display = 'flex';
-                
-                renderNotesList();
-            } catch (err) {
-                console.error('删除失败:', err);
+        function showDeleteToast(note) {
+            // 若有未提交的上次删除，立即发出请求
+            if (pendingDelete) {
+                clearTimeout(pendingDelete.timer);
+                pendingDelete.toastEl.remove();
+                fetch(`${API_BASE}/api/notes/${pendingDelete.note.id}`, { method: 'DELETE' })
+                    .catch(err => console.error('删除失败:', err));
             }
+
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<span>笔记已删除</span><button class="toast-undo">撤销</button>`;
+            document.body.appendChild(toast);
+
+            const timer = setTimeout(() => {
+                fetch(`${API_BASE}/api/notes/${note.id}`, { method: 'DELETE' })
+                    .catch(err => console.error('删除失败:', err));
+                toast.remove();
+                pendingDelete = null;
+            }, 4000);
+
+            toast.querySelector('.toast-undo').addEventListener('click', () => {
+                clearTimeout(timer);
+                toast.remove();
+                pendingDelete = null;
+                notes.push(note);
+                selectNote(note.id);
+                renderNotesList();
+            });
+
+            pendingDelete = { note, timer, toastEl: toast };
+        }
+
+        function deleteNote() {
+            if (!currentNoteId) return;
+            const note = notes.find(n => n.id === currentNoteId);
+            if (!note) return;
+
+            notes = notes.filter(n => n.id !== currentNoteId);
+            currentNoteId = null;
+
+            elements.editorWrapper.style.display = 'none';
+            elements.emptyState.style.display = 'flex';
+            elements.app.classList.remove('editor-active');
+
+            renderNotesList();
+            showDeleteToast(note);
         }
 
         elements.newNoteBtn.addEventListener('click', createNote);
         elements.deleteNoteBtn.addEventListener('click', deleteNote);
+        elements.backBtn.addEventListener('click', goBackToList);
         elements.noteTitle.addEventListener('input', scheduleSave);
         elements.noteContent.addEventListener('input', scheduleSave);
         elements.searchInput.addEventListener('input', (e) => {
