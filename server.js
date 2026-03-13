@@ -8,6 +8,14 @@ const PORT = process.env.PORT || 3000;
 const NOTES_DIR = path.join(__dirname, 'data', 'notes');
 const MAX_BODY_SIZE = 1 * 1024 * 1024; // 1MB
 
+// 全局错误处理，防止无声崩溃
+process.on('uncaughtException', (err) => {
+    console.error('未捕获的异常:', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('未处理的 Promise rejection:', reason);
+});
+
 if (!fs.existsSync(NOTES_DIR)) {
     fs.mkdirSync(NOTES_DIR, { recursive: true });
 }
@@ -64,33 +72,47 @@ function sendJSON(res, statusCode, data) {
     res.end(JSON.stringify(data));
 }
 
-function sendFile(res, filePath, contentType) {
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
-            res.writeHead(404);
-            res.end('Not Found');
-            return;
-        }
+async function sendFile(res, filePath, contentType) {
+    try {
+        const data = await fsp.readFile(filePath);
         res.writeHead(200, { 'Content-Type': contentType });
         res.end(data);
-    });
+    } catch {
+        if (!res.headersSent) {
+            res.writeHead(404);
+            res.end('Not Found');
+        }
+    }
 }
 
 function readBody(req) {
     return new Promise((resolve, reject) => {
         let body = '';
         let size = 0;
+        let settled = false;
         req.on('data', chunk => {
+            if (settled) return;
             size += chunk.length;
             if (size > MAX_BODY_SIZE) {
+                settled = true;
                 reject(Object.assign(new Error('Body too large'), { status: 413 }));
                 req.destroy();
                 return;
             }
             body += chunk;
         });
-        req.on('end', () => resolve(body));
-        req.on('error', reject);
+        req.on('end', () => {
+            if (!settled) {
+                settled = true;
+                resolve(body);
+            }
+        });
+        req.on('error', (err) => {
+            if (!settled) {
+                settled = true;
+                reject(err);
+            }
+        });
     });
 }
 
@@ -99,20 +121,20 @@ function sanitizeString(val, maxLen) {
 }
 
 const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://localhost:${PORT}`);
-    const pathname = url.pathname;
-
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        res.writeHead(204);
-        res.end();
-        return;
-    }
-
     try {
+        const url = new URL(req.url, `http://localhost:${PORT}`);
+        const pathname = url.pathname;
+
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+        if (req.method === 'OPTIONS') {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+
         if (pathname === '/api/notes' && req.method === 'GET') {
             const notes = await getNotes();
             sendJSON(res, 200, notes);
@@ -185,7 +207,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (pathname === '/' || pathname === '/index.html') {
-            sendFile(res, path.join(__dirname, 'public', 'index.html'), 'text/html');
+            await sendFile(res, path.join(__dirname, 'public', 'index.html'), 'text/html');
             return;
         }
 
@@ -197,6 +219,10 @@ const server = http.createServer(async (req, res) => {
             sendJSON(res, 500, { error: 'Internal server error' });
         }
     }
+});
+
+server.on('error', (err) => {
+    console.error('服务器错误:', err);
 });
 
 server.listen(PORT, () => {
