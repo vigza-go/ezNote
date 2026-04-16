@@ -153,6 +153,26 @@ function getYDoc(noteId) {
             } catch (err) {
                 console.error(`加载 Yjs 文档失败 ${noteId}:`, err.message)
             }
+        } else {
+            const notePath = path.join(NOTES_DIR, `${noteId}.json`)
+            if (fs.existsSync(notePath)) {
+                try {
+                    const note = JSON.parse(fs.readFileSync(notePath, 'utf-8'))
+                    if (note.content && note.content.length > 0) {
+                        const fragment = ydoc.getXmlFragment('default')
+                        const lines = note.content.split('\n')
+                        for (const line of lines) {
+                            const p = new Y.XmlElement('paragraph')
+                            if (line.length > 0) {
+                                p.insert(0, [new Y.XmlText(line)])
+                            }
+                            fragment.insert(fragment.length, [p])
+                        }
+                    }
+                } catch (err) {
+                    console.error(`从 JSON 初始化 Yjs 文档失败 ${noteId}:`, err.message)
+                }
+            }
         }
 
         ydoc.on('update', (update, origin) => {
