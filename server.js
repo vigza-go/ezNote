@@ -66,8 +66,49 @@ async function saveNote(note) {
 
 async function deleteNote(id) {
     try {
-        await fsp.unlink(path.join(NOTES_DIR, `${id}.json`))
-        try { await fsp.unlink(path.join(YJS_DIR, `${id}.yjs`)) } catch { }
+        const notePath = path.join(NOTES_DIR, `${id}.json`)
+        const yjsPath = path.join(YJS_DIR, `${id}.yjs`)
+        
+        const docInfo = docs.get(id)
+        if (docInfo) {
+            if (saveTimers.has(id)) {
+                clearTimeout(saveTimers.get(id))
+                saveTimers.delete(id)
+            }
+            for (const [conn] of docInfo.conns) {
+                try { conn.close() } catch { }
+            }
+            docInfo.conns.clear()
+            docInfo.ydoc.destroy()
+            docInfo.awareness.destroy()
+            docs.delete(id)
+        }
+        
+        let content = ''
+        try {
+            const note = JSON.parse(await fsp.readFile(notePath, 'utf-8'))
+            content = note.content || ''
+        } catch { }
+        
+        try {
+            const yjsData = await fsp.readFile(yjsPath)
+            const tempDoc = new Y.Doc()
+            Y.applyUpdate(tempDoc, yjsData)
+            content = getPlainTextFromDoc(tempDoc) + ' ' + content
+            tempDoc.destroy()
+        } catch { }
+        
+        const imageRegex = /\/images\/([a-z0-9]+\.[a-z0-9]+)/gi
+        const matches = content.matchAll(imageRegex)
+        for (const match of matches) {
+            const imageName = match[1]
+            try {
+                await fsp.unlink(path.join(IMAGES_DIR, imageName))
+            } catch { }
+        }
+        
+        await fsp.unlink(notePath)
+        try { await fsp.unlink(yjsPath) } catch { }
         return true
     } catch {
         return false
@@ -162,7 +203,7 @@ function scheduleSave(noteId) {
     }, SAVE_DEBOUNCE_MS))
 }
 
-function closeDoc(noteId) {
+async function closeDoc(noteId) {
     const docInfo = docs.get(noteId)
     if (!docInfo) return
     if (docInfo.conns.size === 0) {
@@ -170,12 +211,22 @@ function closeDoc(noteId) {
             clearTimeout(saveTimers.get(noteId))
             saveTimers.delete(noteId)
         }
-        persistDoc(noteId)
+        await persistDoc(noteId)
         docInfo.ydoc.destroy()
         docInfo.awareness.destroy()
         docs.delete(noteId)
     }
 }
+
+const DOC_CLEANUP_INTERVAL = 60000
+setInterval(async () => {
+    for (const noteId of [...docs.keys()]) {
+        const docInfo = docs.get(noteId)
+        if (docInfo && docInfo.conns.size === 0) {
+            await closeDoc(noteId)
+        }
+    }
+}, DOC_CLEANUP_INTERVAL)
 
 function sendWS(conn, data) {
     if (conn.readyState === 1) {
@@ -470,12 +521,13 @@ const server = http.createServer(async (req, res) => {
                 sendJSON(res, e.status === 413 ? 413 : 400, { error: e.status === 413 ? 'Request body too large' : 'Invalid JSON' })
                 return
             }
+            const id = (body.id && isValidId(body.id)) ? body.id : generateId()
             const note = {
-                id: generateId(),
+                id: id,
                 title: sanitizeString(body.title, 500) ?? '',
                 content: sanitizeString(body.content, 100000) ?? '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                createdAt: body.createdAt || new Date().toISOString(),
+                updatedAt: body.updatedAt || new Date().toISOString()
             }
             await saveNote(note)
             sendJSON(res, 201, note)
@@ -541,6 +593,18 @@ const server = http.createServer(async (req, res) => {
                 const js = await fsp.readFile(path.join(__dirname, 'public', 'bundle.js'))
                 res.writeHead(200, { 'Content-Type': 'application/javascript' })
                 res.end(js)
+            } catch {
+                res.writeHead(404)
+                res.end('Not Found')
+            }
+            return
+        }
+
+        if (pathname === '/favicon.svg') {
+            try {
+                const svg = await fsp.readFile(path.join(__dirname, 'public', 'favicon.svg'))
+                res.writeHead(200, { 'Content-Type': 'image/svg+xml' })
+                res.end(svg)
             } catch {
                 res.writeHead(404)
                 res.end('Not Found')

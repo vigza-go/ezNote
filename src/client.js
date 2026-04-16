@@ -17,6 +17,7 @@ let editor = null
 let ydoc = null
 let wsProvider = null
 let awarenessChangeHandler = null
+let syncHandler = null
 let titleSaveTimeout = null
 let isDark = localStorage.getItem('eznote-dark') === 'true'
 
@@ -133,10 +134,14 @@ function destroyEditor() {
         if (awarenessChangeHandler && wsProvider.awareness) {
             wsProvider.awareness.off('change', awarenessChangeHandler)
         }
+        if (syncHandler) {
+            wsProvider.off('sync', syncHandler)
+        }
         wsProvider.disconnect()
         wsProvider.destroy()
         wsProvider = null
         awarenessChangeHandler = null
+        syncHandler = null
     }
     if (editor) {
         editor.destroy()
@@ -213,81 +218,94 @@ async function selectNote(id) {
         initialContent = '<p></p>'
     }
 
-    const hasYjsState = wsProvider.synced
-
-    editor = new Editor({
-        element: el.editorContent,
-        extensions: [
-            StarterKit.configure({
-                history: false,
-                undoRedo: false,
-                underline: false,
-            }),
-            Underline,
-            Image.configure({
-                inline: false,
-                allowBase64: false,
-            }),
-            Placeholder.configure({
-                placeholder: '开始写笔记...',
-            }),
-            Collaboration.configure({
-                document: ydoc,
-            }),
-            BubbleMenu.configure({
-                element: el.bubbleMenu,
-                shouldShow: ({ state }) => {
-                    const { from, to } = state.selection
-                    return from !== to
+    const initEditor = (content) => {
+        if (editor) return
+        editor = new Editor({
+            element: el.editorContent,
+            extensions: [
+                StarterKit.configure({
+                    history: false,
+                    undoRedo: false,
+                    underline: false,
+                }),
+                Underline,
+                Image.configure({
+                    inline: false,
+                    allowBase64: false,
+                }),
+                Placeholder.configure({
+                    placeholder: '开始写笔记...',
+                }),
+                Collaboration.configure({
+                    document: ydoc,
+                }),
+                BubbleMenu.configure({
+                    element: el.bubbleMenu,
+                    shouldShow: ({ state }) => {
+                        const { from, to } = state.selection
+                        return from !== to
+                    },
+                }),
+            ],
+            content: content,
+            editorProps: {
+                attributes: {
+                    class: 'tiptap-editor',
                 },
-            }),
-        ],
-        content: hasYjsState ? undefined : initialContent,
-        editorProps: {
-            attributes: {
-                class: 'tiptap-editor',
-            },
-            handlePaste: (view, event) => {
-                const items = event.clipboardData?.items
-                if (!items) return false
+                handlePaste: (view, event) => {
+                    const items = event.clipboardData?.items
+                    if (!items) return false
 
-                for (const item of items) {
-                    if (item.type.startsWith('image/')) {
-                        event.preventDefault()
-                        const file = item.getAsFile()
-                        if (file) uploadAndInsertImage(file)
-                        return true
+                    for (const item of items) {
+                        if (item.type.startsWith('image/')) {
+                            event.preventDefault()
+                            const file = item.getAsFile()
+                            if (file) uploadAndInsertImage(file)
+                            return true
+                        }
                     }
-                }
-                return false
-            },
-            handleDrop: (view, event) => {
-                const files = event.dataTransfer?.files
-                if (!files || files.length === 0) return false
+                    return false
+                },
+                handleDrop: (view, event) => {
+                    const files = event.dataTransfer?.files
+                    if (!files || files.length === 0) return false
 
-                for (const file of files) {
-                    if (file.type.startsWith('image/')) {
-                        event.preventDefault()
-                        uploadAndInsertImage(file)
-                        return true
+                    for (const file of files) {
+                        if (file.type.startsWith('image/')) {
+                            event.preventDefault()
+                            uploadAndInsertImage(file)
+                            return true
+                        }
                     }
-                }
-                return false
+                    return false
+                },
             },
-        },
-        onUpdate: ({ editor }) => {
-            const text = editor.getText()
-            const note = notes.find(n => n.id === currentNoteId)
-            if (note) {
-                note.content = text.substring(0, 100000)
-                note.updatedAt = new Date().toISOString()
-                renderNotesList()
-            }
-        },
-    })
+            onUpdate: ({ editor }) => {
+                const text = editor.getText()
+                const note = notes.find(n => n.id === currentNoteId)
+                if (note) {
+                    note.content = text.substring(0, 100000)
+                    note.updatedAt = new Date().toISOString()
+                    renderNotesList()
+                }
+            },
+        })
+        window.editor = editor
+        renderNotesList()
+    }
 
-    window.editor = editor
-    renderNotesList()
+    if (wsProvider.synced) {
+        initEditor(undefined)
+    } else {
+        const syncTimeout = setTimeout(() => {
+            initEditor(initialContent)
+        }, 1000)
+        syncHandler = () => {
+            clearTimeout(syncTimeout)
+            initEditor(undefined)
+        }
+        wsProvider.on('sync', syncHandler)
+    }
 }
 
 async function uploadAndInsertImage(file) {
@@ -399,11 +417,20 @@ function showDeleteToast(note) {
         pendingDelete = null
     }, 4000)
 
-    toast.querySelector('.toast-undo').addEventListener('click', () => {
+    toast.querySelector('.toast-undo').addEventListener('click', async () => {
         clearTimeout(timer)
         toast.remove()
         pendingDelete = null
         notes.push(note)
+        try {
+            await fetch(`${API_BASE}/api/notes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: note.title, content: note.content, id: note.id })
+            })
+        } catch (err) {
+            console.error('恢复笔记失败:', err)
+        }
         selectNote(note.id)
         renderNotesList()
     })
