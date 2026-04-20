@@ -287,7 +287,9 @@ async function selectNote(id) {
                 const note = notes.find(n => n.id === currentNoteId)
                 if (note) {
                     note.content = text.substring(0, 100000)
-                    // 只有内容和初始内容不同时才更新时间
+                    if(editorInitialContent === null && text != ""){
+                        editorInitialContent = text
+                    }
                     if (editorInitialContent !== null && text !== editorInitialContent) {
                         note.updatedAt = new Date().toISOString()
                     }
