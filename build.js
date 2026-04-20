@@ -32,7 +32,7 @@ async function build() {
         dir: 'public/chunks',
         format: 'esm',
         sourcemap: false,
-        entryFileNames: '[name].js',
+        entryFileNames: '[name]-[hash].js',
         chunkFileNames: '[name]-[hash].js',
         manualChunks: (id) => {
             if (id.includes('node_modules')) {
@@ -59,11 +59,13 @@ async function build() {
     // 更新 index.html
     const indexPath = path.join(__dirname, 'public', 'index.html')
     let html = fs.readFileSync(indexPath, 'utf-8')
-    // 替换旧的 script 标签，改为加载 vendor 和 client 模块
-    html = html.replace(
-        /<script src="\/bundle\.js"><\/script>/,
-        `<script type="module" src="/chunks/${vendorFile}"></script>\n    <script type="module" src="/chunks/${clientFile}"></script>`
-    )
+
+    // 匹配旧的 bundle.js 或已有的 chunks 引用
+    const scriptPattern = /<script[^>]*src="\/chunks\/[^"]*"[^>]*><\/script>\s*<script[^>]*src="\/chunks\/[^"]*"[^>]*><\/script>/
+
+    const newScripts = `<script type="module" src="/chunks/${vendorFile}"></script>\n    <script type="module" src="/chunks/${clientFile}"></script>`
+
+    html = html.replace(scriptPattern, newScripts)
     fs.writeFileSync(indexPath, html)
 
     console.log(`✓ 代码分割完成`)
