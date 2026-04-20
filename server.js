@@ -617,6 +617,44 @@ const server = http.createServer(async (req, res) => {
             return
         }
 
+        if (pathname.startsWith('/chunks/')) {
+            const fileName = pathname.slice(8)
+            const filePath = path.join(__dirname, 'public', 'chunks', fileName)
+            try {
+                await fsp.access(filePath)
+                const js = await fsp.readFile(filePath)
+                const acceptEncoding = req.headers['accept-encoding'] || ''
+                if (acceptEncoding.includes('gzip')) {
+                    zlib.gzip(js, (err, compressed) => {
+                        if (err) {
+                            res.writeHead(200, {
+                                'Content-Type': 'application/javascript',
+                                'Cache-Control': 'public, max-age=31536000'
+                            })
+                            res.end(js)
+                            return
+                        }
+                        res.writeHead(200, {
+                            'Content-Type': 'application/javascript',
+                            'Content-Encoding': 'gzip',
+                            'Cache-Control': 'public, max-age=31536000'
+                        })
+                        res.end(compressed)
+                    })
+                } else {
+                    res.writeHead(200, {
+                        'Content-Type': 'application/javascript',
+                        'Cache-Control': 'public, max-age=31536000'
+                    })
+                    res.end(js)
+                }
+            } catch {
+                res.writeHead(404)
+                res.end('Not Found')
+            }
+            return
+        }
+
         if (pathname === '/bundle.js') {
             try {
                 const js = await fsp.readFile(path.join(__dirname, 'public', 'bundle.js'))

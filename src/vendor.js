@@ -1,0 +1,10 @@
+// 第三方库 - 单独打包以便长期缓存
+export { Editor } from '@tiptap/core'
+export { StarterKit } from '@tiptap/starter-kit'
+export { Image } from '@tiptap/extension-image'
+export { Placeholder } from '@tiptap/extension-placeholder'
+export { Collaboration } from '@tiptap/extension-collaboration'
+export { BubbleMenu } from '@tiptap/extension-bubble-menu'
+export { Underline } from '@tiptap/extension-underline'
+export * as Y from 'yjs'
+export { WebsocketProvider } from 'y-websocket'
