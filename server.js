@@ -169,6 +169,9 @@ function getYDoc(noteId) {
                             fragment.insert(fragment.length, [p])
                         }
                     }
+                    // 创建 yjs 文件，避免下次打开时重复初始化
+                    const state = Y.encodeStateAsUpdate(ydoc)
+                    fs.writeFileSync(yjsPath, Buffer.from(state))
                 } catch (err) {
                     console.error(`从 JSON 初始化 Yjs 文档失败 ${noteId}:`, err.message)
                 }
@@ -206,8 +209,14 @@ async function persistDoc(noteId) {
         const plainText = getPlainTextFromDoc(docInfo.ydoc)
         const note = await getNote(noteId)
         if (note) {
+            // 格式不同导致的差异（如 \n vs \n\n）不算真正变化
+            const oldTrimmed = (note.content || '').replace(/\n+/g, '\n').trim()
+            const newTrimmed = plainText.replace(/\n+/g, '\n').trim()
+            const contentChanged = oldTrimmed !== newTrimmed
+            if (contentChanged) {
+                note.updatedAt = new Date().toISOString()
+            }
             note.content = plainText
-            note.updatedAt = new Date().toISOString()
             await saveNote(note)
         }
     } catch (err) {

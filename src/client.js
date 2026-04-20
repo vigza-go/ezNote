@@ -19,6 +19,7 @@ let wsProvider = null
 let awarenessChangeHandler = null
 let syncHandler = null
 let titleSaveTimeout = null
+let editorInitialContent = null
 let isDark = localStorage.getItem('eznote-dark') === 'true'
 
 const COLLAB_COLORS = [
@@ -157,6 +158,7 @@ async function selectNote(id) {
     if (currentNoteId === id) return
     destroyEditor()
     currentNoteId = id
+    editorInitialContent = null
 
     const note = notes.find(n => n.id === id)
     if (!note) return
@@ -285,12 +287,17 @@ async function selectNote(id) {
                 const note = notes.find(n => n.id === currentNoteId)
                 if (note) {
                     note.content = text.substring(0, 100000)
-                    note.updatedAt = new Date().toISOString()
+                    // 只有内容和初始内容不同时才更新时间
+                    if (editorInitialContent !== null && text !== editorInitialContent) {
+                        note.updatedAt = new Date().toISOString()
+                    }
                     renderNotesList()
                 }
             },
         })
         window.editor = editor
+        // 记录初始内容，用于检测真正的编辑
+        editorInitialContent = editor.getText()
         renderNotesList()
     }
 
