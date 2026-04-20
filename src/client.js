@@ -301,18 +301,9 @@ async function selectNote(id) {
         renderNotesList()
     }
 
-    if (wsProvider.synced) {
-        initEditor(undefined)
-    } else {
-        const syncTimeout = setTimeout(() => {
-            initEditor(initialContent)
-        }, 1000)
-        syncHandler = () => {
-            clearTimeout(syncTimeout)
-            initEditor(undefined)
-        }
-        wsProvider.on('sync', syncHandler)
-    }
+    // 立即用 initialContent 初始化编辑器，让用户立刻看到内容
+    // Yjs 同步在后台进行，完成后自动更新编辑器
+    initEditor(initialContent)
 }
 
 async function uploadAndInsertImage(file) {
