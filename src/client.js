@@ -287,8 +287,17 @@ async function selectNote(id) {
                 const note = notes.find(n => n.id === currentNoteId)
                 if (note) {
                     note.content = text.substring(0, 100000)
-                    if(editorInitialContent === null && text != ""){
+                    var f = (x) => {
+		    	console.log("type",typeof x)
+			console.log("str",x)
+		    }
+		console.log(1)
+		    f(editorInitialContent)
+		console.log(2)
+		    f(text)
+		    if(editorInitialContent === null && text != ""){
                         editorInitialContent = text
+			
                     }
                     if (editorInitialContent !== null && text !== editorInitialContent) {
                         note.updatedAt = new Date().toISOString()
@@ -299,7 +308,6 @@ async function selectNote(id) {
         })
         window.editor = editor
         // 记录初始内容，用于检测真正的编辑
-        editorInitialContent = editor.getText()
         renderNotesList()
     }
 
