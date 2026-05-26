@@ -1,6 +1,8 @@
 # 轻记 - 轻量协同笔记
 
 基于 Node.js + JSON 文件存储的轻量级协同图文笔记应用。
+<img width="2880" height="1509" alt="image" src="https://github.com/user-attachments/assets/45a2ffc4-fa15-4cd8-a340-a3571cf68b82" />
+<img width="2880" height="1488" alt="image" src="https://github.com/user-attachments/assets/77ea8db4-7a46-49d7-9bf4-a1ee7e3a4dec" />
 
 ## 特性
 
