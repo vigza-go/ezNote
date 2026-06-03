@@ -6,7 +6,7 @@ const { execSync } = require('child_process');
 // ============ 配置区 ============
 const WEBDAV_URL = process.env.WEBDAV_URL || 'https://pan.vigza.top/dav';
 const WEBDAV_USERNAME = process.env.WEBDAV_USER || '1130684907@qq.com';
-const WEBDAV_PASSWORD = process.env.WEBDAV_PASS || 'UeClXGKWjwNy2PqCEWt7YFixRtHKCxkq';
+const WEBDAV_PASSWORD = process.env.WEBDAV_PASSWORD || 'UeClXGKWjwNy2PqCEWt7YFixRtHKCxkq';
 const DATA_DIR = path.join(__dirname, 'data');
 const BACKUP_NAME = process.env.BACKUP_NAME || 'ezNote-backup';
 const MAX_RETRIES = 10;
