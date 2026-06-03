@@ -714,4 +714,9 @@ server.listen(PORT, () => {
     console.log(`  笔记目录: ${NOTES_DIR}`)
     console.log(`  图片目录: ${IMAGES_DIR}`)
     console.log(`  Yjs 目录:  ${YJS_DIR}`)
+
+    // 启动 WebDAV 定时备份
+    if (process.env.ENABLE_BACKUP !== 'false') {
+        require('./backup')
+    }
 })
