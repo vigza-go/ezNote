@@ -542,6 +542,25 @@ const server = http.createServer(async (req, res) => {
             return
         }
 
+        // 返回 ydoc 二进制数据的 base64，用于客户端秒开编辑器
+        const ydocMatch = pathname.match(/^\/api\/notes\/([^/]+)\/ydoc$/)
+        if (ydocMatch) {
+            const id = ydocMatch[1]
+            if (!isValidId(id)) {
+                sendJSON(res, 400, { error: 'Invalid note ID' })
+                return
+            }
+            const yjsPath = path.join(YJS_DIR, `${id}.yjs`)
+            try {
+                const ydocData = await fsp.readFile(yjsPath)
+                sendJSON(res, 200, { ydoc_base64: ydocData.toString('base64') })
+            } catch {
+                // 如果 .yjs 文件不存在，返回空的 ydoc
+                sendJSON(res, 200, { ydoc_base64: '' })
+            }
+            return
+        }
+
         if (pathname === '/api/notes' && req.method === 'POST') {
             let body
             try {

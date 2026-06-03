@@ -19,9 +19,8 @@ let wsProvider = null
 let awarenessChangeHandler = null
 let syncHandler = null
 let titleSaveTimeout = null
-let editorInitialContent = null
 let isDark = localStorage.getItem('eznote-dark') === 'true'
-
+let firstLoad = true
 const COLLAB_COLORS = [
     '#f44336', '#e91e63', '#9c27b0', '#673ab7',
     '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4',
@@ -158,7 +157,6 @@ async function selectNote(id) {
     if (currentNoteId === id) return
     destroyEditor()
     currentNoteId = id
-    editorInitialContent = null
 
     const note = notes.find(n => n.id === id)
     if (!note) return
@@ -168,8 +166,27 @@ async function selectNote(id) {
     el.noteTitle.value = note.title
     el.app.classList.add('editor-active')
 
+    // 第一步：创建本地 Y.Doc
     ydoc = new Y.Doc()
+    // 第二步：HTTP 请求获取原始 ydoc 二进制数据并立时注入
+    try {
+        const res = await fetch(`${API_BASE}/api/notes/${id}/ydoc`)
+        const data = await res.json()
+        if (data.ydoc_base64 && data.ydoc_base64.length > 0) {
+            const binaryStr = atob(data.ydoc_base64)
+            const bytes = new Uint8Array(binaryStr.length)
+            for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i)
+            }
+            Y.applyUpdate(ydoc, bytes)
+        }
+    } catch (err) {
+        console.error('获取 ydoc 失败:', err)
+    }
+    firstLoad = true
+    initEditor()
 
+    // 第四步：后台静默连接 WebSocket，仅作增量同步
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     wsProvider = new WebsocketProvider(
         `${wsProtocol}//${location.host}`,
@@ -209,111 +226,82 @@ async function selectNote(id) {
         }
     }
     wsProvider.awareness.on('change', awarenessChangeHandler)
+}
 
-    let initialContent = note.content || ''
-    if (typeof initialContent === 'string' && initialContent.length > 0) {
-        const htmlContent = initialContent.split('\n').map(line =>
-            `<p>${line || '<br>'}</p>`
-        ).join('')
-        initialContent = htmlContent
-    } else {
-        initialContent = '<p></p>'
-    }
-
-    const initEditor = (content) => {
-        if (editor) return
-        editor = new Editor({
-            element: el.editorContent,
-            extensions: [
-                StarterKit.configure({
-                    history: false,
-                    undoRedo: false,
-                    underline: false,
-                }),
-                Underline,
-                Image.configure({
-                    inline: false,
-                    allowBase64: false,
-                }),
-                Placeholder.configure({
-                    placeholder: '开始写笔记...',
-                }),
-                Collaboration.configure({
-                    document: ydoc,
-                }),
-                BubbleMenu.configure({
-                    element: el.bubbleMenu,
-                    shouldShow: ({ state }) => {
-                        const { from, to } = state.selection
-                        return from !== to
-                    },
-                }),
-            ],
-            content: content,
-            editorProps: {
-                attributes: {
-                    class: 'tiptap-editor',
+const initEditor = () => {
+    if (editor) return
+    editor = new Editor({
+        element: el.editorContent,
+        extensions: [
+            StarterKit.configure({
+                history: false,
+                undoRedo: false,
+                underline: false,
+            }),
+            Underline,
+            Image.configure({
+                inline: false,
+                allowBase64: false,
+            }),
+            Placeholder.configure({
+                placeholder: '开始写笔记...',
+            }),
+            Collaboration.configure({
+                document: ydoc,
+            }),
+            BubbleMenu.configure({
+                element: el.bubbleMenu,
+                shouldShow: ({ state }) => {
+                    const { from, to } = state.selection
+                    return from !== to
                 },
-                handlePaste: (view, event) => {
-                    const items = event.clipboardData?.items
-                    if (!items) return false
-
-                    for (const item of items) {
-                        if (item.type.startsWith('image/')) {
-                            event.preventDefault()
-                            const file = item.getAsFile()
-                            if (file) uploadAndInsertImage(file)
-                            return true
-                        }
-                    }
-                    return false
-                },
-                handleDrop: (view, event) => {
-                    const files = event.dataTransfer?.files
-                    if (!files || files.length === 0) return false
-
-                    for (const file of files) {
-                        if (file.type.startsWith('image/')) {
-                            event.preventDefault()
-                            uploadAndInsertImage(file)
-                            return true
-                        }
-                    }
-                    return false
-                },
+            }),
+        ],
+        editorProps: {
+            attributes: {
+                class: 'tiptap-editor',
             },
-            onUpdate: ({ editor }) => {
-                const text = editor.getText()
-                const note = notes.find(n => n.id === currentNoteId)
-                if (note) {
-                    note.content = text.substring(0, 100000)
-                    var f = (x) => {
-		    	console.log("type",typeof x)
-			console.log("str",x)
-		    }
-		console.log(1)
-		    f(editorInitialContent)
-		console.log(2)
-		    f(text)
-		    if(editorInitialContent === null && text != ""){
-                        editorInitialContent = text
-			
+            handlePaste: (view, event) => {
+                const items = event.clipboardData?.items
+                if (!items) return false
+
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        event.preventDefault()
+                        const file = item.getAsFile()
+                        if (file) uploadAndInsertImage(file)
+                        return true
                     }
-                    if (editorInitialContent !== null && text !== editorInitialContent) {
-                        note.updatedAt = new Date().toISOString()
-                    }
-                    renderNotesList()
                 }
+                return false
             },
-        })
-        window.editor = editor
-        // 记录初始内容，用于检测真正的编辑
-        renderNotesList()
-    }
+            handleDrop: (view, event) => {
+                const files = event.dataTransfer?.files
+                if (!files || files.length === 0) return false
 
-    // 立即用 initialContent 初始化编辑器，让用户立刻看到内容
-    // Yjs 同步在后台进行，完成后自动更新编辑器
-    initEditor(initialContent)
+                for (const file of files) {
+                    if (file.type.startsWith('image/')) {
+                        event.preventDefault()
+                        uploadAndInsertImage(file)
+                        return true
+                    }
+                }
+                return false
+            },
+        },
+        onUpdate: ({ editor }) => {
+            const note = notes.find(n => n.id === currentNoteId)
+            if (note && !firstLoad) {
+                const text = editor.getText()
+                note.content = text
+                note.updatedAt = new Date().toISOString()
+                renderNotesList()
+            }
+            firstLoad = false
+        },
+    })
+    window.editor = editor
+    renderNotesList()
 }
 
 async function uploadAndInsertImage(file) {
