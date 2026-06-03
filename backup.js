@@ -6,10 +6,30 @@ const { execSync } = require('child_process');
 // ============ 配置区 ============
 const WEBDAV_URL = process.env.WEBDAV_URL || 'https://pan.vigza.top/dav';
 const WEBDAV_USERNAME = process.env.WEBDAV_USER || '1130684907@qq.com';
-const WEBDAV_PASSWORD = process.env.WEBDAV_PASS || 'A3vZGbbs2s3MRVFJ0enq1ELzKl3DgXZI';
+const WEBDAV_PASSWORD = process.env.WEBDAV_PASS || 'UeClXGKWjwNy2PqCEWt7YFixRtHKCxkq';
 const DATA_DIR = path.join(__dirname, 'data');
 const BACKUP_NAME = process.env.BACKUP_NAME || 'ezNote-backup';
+const MAX_RETRIES = 10;
+const BASE_DELAY_MS = 1000;
 // ================================
+
+async function uploadWithRetry(webdavClient, remotePath, data, retries = MAX_RETRIES) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      await webdavClient.putFileContents(remotePath, data, { format: 'binary' });
+      return { success: true };
+    } catch (err) {
+      const delay = BASE_DELAY_MS * Math.pow(2, i - 1);
+      console.error(`[${new Date().toISOString()}] 上传失败 (${i}/${retries}):`, err.message);
+      if (i < retries) {
+        console.log(`[${new Date().toISOString()}] ${delay/1000}秒后重试...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        return { success: false, error: err };
+      }
+    }
+  }
+}
 
 async function createBackup() {
   const tempBackupDir = path.join(__dirname, `temp_backup_${Date.now()}`);
@@ -32,12 +52,20 @@ async function createBackup() {
     const { createClient } = await import('webdav');
     const webdavClient = createClient(WEBDAV_URL, {
       username: WEBDAV_USERNAME,
-      password: WEBDAV_PASSWORD
+      password: WEBDAV_PASSWORD,
+      agent: new (require('https').Agent)({
+        rejectUnauthorized: false
+      }),
     });
 
-    await webdavClient.putFileContents(`/${BACKUP_NAME}.zip`, fs.readFileSync(zipPath), { format: 'binary' });
+    const fileData = fs.readFileSync(zipPath);
+    const result = await uploadWithRetry(webdavClient, `/${BACKUP_NAME}.zip`, fileData);
 
-    console.log(`[${new Date().toISOString()}] 备份成功: /${BACKUP_NAME}.zip`);
+    if (result.success) {
+      console.log(`[${new Date().toISOString()}] 备份成功: /${BACKUP_NAME}.zip`);
+    } else {
+      console.error(`[${new Date().toISOString()}] 备份失败:`, result.error.message);
+    }
 
     // 5. 清理本地临时文件
     fs.rmSync(tempBackupDir, { recursive: true, force: true });
