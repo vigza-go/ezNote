@@ -18,3 +18,4 @@ Thumbs.db
 *.swo
 *~
 chunks/
+ecosystem.config.js
