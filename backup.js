@@ -73,6 +73,18 @@ async function createBackup() {
 
   } catch (err) {
     console.error(`[${new Date().toISOString()}] 备份失败:`, err.message);
+  } finally {
+    // 确保临时文件被清理
+    try {
+      if (fs.existsSync(tempBackupDir)) {
+        fs.rmSync(tempBackupDir, { recursive: true, force: true });
+      }
+      if (fs.existsSync(zipPath)) {
+        fs.unlinkSync(zipPath);
+      }
+    } catch (cleanupErr) {
+      console.error(`[${new Date().toISOString()}] 清理临时文件失败:`, cleanupErr.message);
+    }
   }
 }
 

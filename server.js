@@ -744,6 +744,30 @@ const server = http.createServer(async (req, res) => {
             return
         }
 
+        if (pathname === '/manifest.json') {
+            try {
+                const manifest = await fsp.readFile(path.join(__dirname, 'public', 'manifest.json'))
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(manifest)
+            } catch {
+                res.writeHead(404)
+                res.end('Not Found')
+            }
+            return
+        }
+
+        if (pathname === '/apple-touch-icon') {
+            try {
+                const svg = await fsp.readFile(path.join(__dirname, 'public', 'favicon.svg'))
+                res.writeHead(200, { 'Content-Type': 'image/svg+xml' })
+                res.end(svg)
+            } catch {
+                res.writeHead(404)
+                res.end('Not Found')
+            }
+            return
+        }
+
         res.writeHead(404)
         res.end('Not Found')
     } catch (err) {
