@@ -57,6 +57,7 @@ const el = {
     darkToggle: document.getElementById('darkToggle'),
     bubbleMenu: document.getElementById('bubbleMenu'),
     onlineCount: document.getElementById('onlineCount'),
+    scrollBottomBtn: document.getElementById('scrollBottomBtn'),
 }
 
 function escapeHtml(str) {
@@ -515,6 +516,9 @@ function setupBubbleMenu() {
 
 el.newNoteBtn.addEventListener('click', createNote)
 el.deleteNoteBtn.addEventListener('click', deleteNote)
+el.scrollBottomBtn.addEventListener('click', () => {
+    el.editorContent.scrollTop = el.editorContent.scrollHeight
+})
 el.backBtn.addEventListener('click', goBackToList)
 el.noteTitle.addEventListener('input', scheduleTitleSave)
 el.searchInput.addEventListener('input', (e) => {
