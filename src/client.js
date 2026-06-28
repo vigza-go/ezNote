@@ -9,6 +9,8 @@ import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 
 const API_BASE = ''
+const AUTH_TOKEN_KEY = 'eznote-auth-token'
+let authToken = localStorage.getItem(AUTH_TOKEN_KEY)
 let notes = []
 let currentNoteId = null
 let searchQuery = ''
@@ -77,10 +79,29 @@ function applyDarkMode() {
     el.darkToggle.textContent = isDark ? '☀️' : '🌙'
 }
 
+function getAuthHeaders() {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY)
+    if (!token) return {}
+    return { 'x-auth-token': token }
+}
+
 async function fetchNotes() {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY)
+    if (!token) {
+        showLoginScreen()
+        return
+    }
     try {
-        const res = await fetch(`${API_BASE}/api/notes`)
+        const res = await fetch(`${API_BASE}/api/notes`, {
+            headers: { 'x-auth-token': token },
+        })
+        if (res.status === 401) {
+            localStorage.removeItem(AUTH_TOKEN_KEY)
+            showLoginScreen()
+            return
+        }
         notes = await res.json()
+        hideLoginScreen()
         renderNotesList()
     } catch (err) {
         console.error('获取笔记失败:', err)
@@ -170,7 +191,9 @@ async function selectNote(id) {
     ydoc = new Y.Doc()
     // 第二步：HTTP 请求获取原始 ydoc 二进制数据并立时注入
     try {
-        const res = await fetch(`${API_BASE}/api/notes/${id}/ydoc`)
+        const res = await fetch(`${API_BASE}/api/notes/${id}/ydoc`, {
+            headers: getAuthHeaders(),
+        })
         const data = await res.json()
         if (data.ydoc_base64 && data.ydoc_base64.length > 0) {
             const binaryStr = atob(data.ydoc_base64)
@@ -316,6 +339,7 @@ async function uploadAndInsertImage(file) {
     try {
         const res = await fetch(`${API_BASE}/api/upload`, {
             method: 'POST',
+            headers: getAuthHeaders(),
             body: formData,
         })
         if (!res.ok) {
@@ -357,7 +381,7 @@ async function createNote() {
     try {
         const res = await fetch(`${API_BASE}/api/notes`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({ title: '', content: '' })
         })
         const newNote = await res.json()
@@ -377,7 +401,7 @@ async function saveTitle() {
     try {
         await fetch(`${API_BASE}/api/notes/${currentNoteId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({ title: el.noteTitle.value })
         })
         note.title = el.noteTitle.value
@@ -397,7 +421,10 @@ function showDeleteToast(note) {
     if (pendingDelete) {
         clearTimeout(pendingDelete.timer)
         pendingDelete.toastEl.remove()
-        fetch(`${API_BASE}/api/notes/${pendingDelete.note.id}`, { method: 'DELETE' })
+        fetch(`${API_BASE}/api/notes/${pendingDelete.note.id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+        })
             .catch(err => console.error('删除失败:', err))
     }
 
@@ -407,7 +434,10 @@ function showDeleteToast(note) {
     document.body.appendChild(toast)
 
     const timer = setTimeout(() => {
-        fetch(`${API_BASE}/api/notes/${note.id}`, { method: 'DELETE' })
+        fetch(`${API_BASE}/api/notes/${note.id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+        })
             .catch(err => console.error('删除失败:', err))
         toast.remove()
         pendingDelete = null
@@ -421,7 +451,7 @@ function showDeleteToast(note) {
         try {
             await fetch(`${API_BASE}/api/notes`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ title: note.title, content: note.content, id: note.id })
             })
         } catch (err) {
@@ -499,4 +529,51 @@ el.darkToggle.addEventListener('click', () => {
 
 applyDarkMode()
 setupBubbleMenu()
-fetchNotes()
+
+// 登录逻辑
+function showLoginScreen() {
+    document.getElementById('loginScreen').classList.remove('hidden')
+    document.getElementById('app').style.display = 'none'
+}
+
+function hideLoginScreen() {
+    document.getElementById('loginScreen').classList.add('hidden')
+    document.getElementById('app').style.display = ''
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const username = document.getElementById('loginUsername').value
+    const password = document.getElementById('loginPassword').value
+    const errorEl = document.getElementById('loginError')
+
+    try {
+        const res = await fetch(`${API_BASE}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+        })
+        const data = await res.json()
+        if (res.ok && data.token) {
+            localStorage.setItem(AUTH_TOKEN_KEY, data.token)
+            authToken = data.token
+            errorEl.style.display = 'none'
+            hideLoginScreen()
+            fetchNotes()
+        } else {
+            errorEl.textContent = data.error || '登录失败'
+            errorEl.style.display = 'block'
+        }
+    } catch (err) {
+        errorEl.textContent = '网络错误，请稍后重试'
+        errorEl.style.display = 'block'
+    }
+})
+
+// 检查是否已登录
+const savedToken = localStorage.getItem(AUTH_TOKEN_KEY)
+if (savedToken) {
+    fetchNotes()
+} else {
+    showLoginScreen()
+}

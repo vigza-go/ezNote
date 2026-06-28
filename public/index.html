@@ -301,6 +301,82 @@
             to   { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
 
+        /* Login Screen */
+        .login-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .login-screen.hidden { display: none; }
+
+        .login-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
+            width: 360px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .login-subtitle {
+            font-size: 14px;
+            color: var(--text-muted);
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-form { display: flex; flex-direction: column; gap: 16px; }
+
+        .login-input {
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .login-input:focus { border-color: var(--accent-color); }
+
+        .login-btn {
+            padding: 12px 16px;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .login-btn:hover { background: var(--accent-hover); }
+
+        .login-error {
+            color: var(--danger-color);
+            font-size: 13px;
+            text-align: center;
+            display: none;
+        }
+
         .toast-undo {
             background: transparent;
             border: 1px solid rgba(255,255,255,0.5);
@@ -477,6 +553,19 @@
     </style>
 </head>
 <body>
+    <div class="login-screen" id="loginScreen">
+        <div class="login-box">
+            <div class="login-title">轻记</div>
+            <div class="login-subtitle">请先登录再使用笔记</div>
+            <form class="login-form" id="loginForm">
+                <input type="text" class="login-input" id="loginUsername" placeholder="用户名" autocomplete="username">
+                <input type="password" class="login-input" id="loginPassword" placeholder="密码" autocomplete="current-password">
+                <button type="submit" class="login-btn">登录</button>
+                <div class="login-error" id="loginError"></div>
+            </form>
+        </div>
+    </div>
+
     <div class="app" id="app">
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -536,7 +625,7 @@
         <button data-action="codeBlock" title="代码块">{ }</button>
     </div>
 
-    <script type="module" src="/chunks/vendor-CPLzmeAl.js"></script>
-    <script type="module" src="/chunks/client-NQLDOf4W.js"></script>
+    <script type="module" src="/chunks/vendor-CnJTFbCm.js"></script>
+    <script type="module" src="/chunks/client-Bz5-YkDc.js"></script>
 </body>
 </html>

@@ -18,11 +18,15 @@ const YJS_DIR = path.join(__dirname, 'data', 'yjs')
 const MAX_BODY_SIZE = 1 * 1024 * 1024
 const MAX_UPLOAD_SIZE = 3 * 1024 * 1024
 const SAVE_DEBOUNCE_MS = 2000
+const AUTH_TOKEN = process.env.AUTH_TOKEN || 'eznoteadm123456tok'
 
 const messageSync = 0
 const messageAwareness = 1
 const messageAuth = 2
 const messageQueryAwareness = 3
+
+const AUTH_USER = 'vigza'
+const AUTH_PASS = '666666'
 
 process.on('uncaughtException', (err) => console.error('未捕获的异常:', err))
 process.on('unhandledRejection', (reason) => console.error('未处理的 Promise rejection:', reason))
@@ -429,6 +433,13 @@ function sanitizeString(val, maxLen) {
     return typeof val === 'string' ? val.slice(0, maxLen) : undefined
 }
 
+// 验证 token
+function verifyToken(req) {
+    const authHeader = req.headers['x-auth-token']
+    return authHeader === AUTH_TOKEN
+}
+
+
 const IMAGE_EXTENSIONS = {
     'image/jpeg': '.jpg',
     'image/png': '.png',
@@ -449,6 +460,28 @@ const server = http.createServer(async (req, res) => {
         if (req.method === 'OPTIONS') {
             res.writeHead(204)
             res.end()
+            return
+        }
+
+        if (pathname === '/api/login' && req.method === 'POST') {
+            let body
+            try {
+                body = JSON.parse((await readBody(req, MAX_BODY_SIZE)).toString())
+            } catch (e) {
+                sendJSON(res, 400, { error: 'Invalid JSON' })
+                return
+            }
+            if (body.username === AUTH_USER && body.password === AUTH_PASS) {
+                sendJSON(res, 200, { token: AUTH_TOKEN })
+            } else {
+                sendJSON(res, 401, { error: '用户名或密码错误' })
+            }
+            return
+        }
+
+        // 仅对 API 路由进行鉴权
+        if (pathname.startsWith('/api/') && !verifyToken(req)) {
+            sendJSON(res, 401, { error: '请先登录' })
             return
         }
 
