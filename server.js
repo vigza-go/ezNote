@@ -475,7 +475,7 @@ const server = http.createServer(async (req, res) => {
                 sendJSON(res, 400, { error: 'Invalid JSON' })
                 return
             }
-            if (body.username === AUTH_USER && body.password === AUTH_PASS) {
+            if (AUTH_PASS && body.username === AUTH_USER && body.password === AUTH_PASS) {
                 sendJSON(res, 200, { token: AUTH_TOKEN })
             } else {
                 sendJSON(res, 401, { error: '用户名或密码错误' })
