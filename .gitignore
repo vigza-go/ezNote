@@ -19,3 +19,7 @@ Thumbs.db
 *~
 chunks/
 ecosystem.config.js
+
+# 备份压缩包 / 运行日志产物
+*.zip
+nohup.out
