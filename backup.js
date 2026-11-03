@@ -4,14 +4,16 @@ const schedule = require('node-schedule');
 const { execSync } = require('child_process');
 
 // ============ 配置区 ============
-const WEBDAV_URL = process.env.WEBDAV_URL || 'https://pan.vigza.top/dav';
-const WEBDAV_USERNAME = process.env.WEBDAV_USER || '1130684907@qq.com';
-const WEBDAV_PASSWORD = process.env.WEBDAV_PASSWORD || 'UeClXGKWjwNy2PqCEWt7YFixRtHKCxkq';
+const WEBDAV_URL = process.env.WEBDAV_URL || '';
+const WEBDAV_USERNAME = process.env.WEBDAV_USER || '';
+const WEBDAV_PASSWORD = process.env.WEBDAV_PASSWORD || '';
 const DATA_DIR = path.join(__dirname, 'data');
 const BACKUP_NAME = process.env.BACKUP_NAME || 'ezNote-backup';
 const MAX_RETRIES = 10;
 const BASE_DELAY_MS = 1000;
 // ================================
+
+const BACKUP_ENABLED = !!WEBDAV_URL && !!WEBDAV_PASSWORD;
 
 async function uploadWithRetry(webdavClient, remotePath, data, retries = MAX_RETRIES) {
   for (let i = 1; i <= retries; i++) {
@@ -103,18 +105,23 @@ function copyDirRecursive(src, dest) {
 }
 
 // ============ 定时任务 ============
-// 每天凌晨 3:00 执行备份
-const rule = new schedule.RecurrenceRule();
-rule.hour = 3;
-rule.minute = 0;
+if (!BACKUP_ENABLED) {
+  console.log('未配置 WEBDAV_URL / WEBDAV_PASSWORD，跳过 WebDAV 定时备份');
+  module.exports = { createBackup };
+} else {
+  // 每天凌晨 3:00 执行备份
+  const rule = new schedule.RecurrenceRule();
+  rule.hour = 3;
+  rule.minute = 0;
 
-schedule.scheduleJob(rule, () => {
+  schedule.scheduleJob(rule, () => {
+    createBackup();
+  });
+
+  console.log('WebDAV 定时备份已启动，每天凌晨 3:00 执行');
+
+  // 启动时立即执行一次备份
   createBackup();
-});
 
-console.log('WebDAV 定时备份已启动，每天凌晨 3:00 执行');
-
-// 启动时立即执行一次备份
-createBackup();
-
-module.exports = { createBackup };
+  module.exports = { createBackup };
+}

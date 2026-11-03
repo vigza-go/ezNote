@@ -18,15 +18,19 @@ const YJS_DIR = path.join(__dirname, 'data', 'yjs')
 const MAX_BODY_SIZE = 1 * 1024 * 1024
 const MAX_UPLOAD_SIZE = 3 * 1024 * 1024
 const SAVE_DEBOUNCE_MS = 2000
-const AUTH_TOKEN = process.env.AUTH_TOKEN || 'eznoteadm123456tok'
+const AUTH_TOKEN = process.env.AUTH_TOKEN || ''
 
 const messageSync = 0
 const messageAwareness = 1
 const messageAuth = 2
 const messageQueryAwareness = 3
 
-const AUTH_USER = 'vigza'
-const AUTH_PASS = '666666'
+const AUTH_USER = process.env.AUTH_USER || 'vigza'
+const AUTH_PASS = process.env.AUTH_PASS || ''
+
+if (!AUTH_TOKEN || !AUTH_PASS) {
+    console.warn('警告: 未设置 AUTH_TOKEN / AUTH_PASS 环境变量，登录与 API 鉴权将不可用')
+}
 
 process.on('uncaughtException', (err) => console.error('未捕获的异常:', err))
 process.on('unhandledRejection', (reason) => console.error('未处理的 Promise rejection:', reason))
