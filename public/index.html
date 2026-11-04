@@ -434,7 +434,10 @@
         }
         .tiptap-editor ul[data-type="taskList"] li > label {
             flex: 0 0 auto;
-            margin-top: 0.28em;
+            display: flex;
+            align-items: center;
+            height: 1.75em; /* 与 .tiptap-editor 的 line-height 一致，保证与首行文字垂直居中 */
+            margin: 0;
             user-select: none;
         }
         .tiptap-editor ul[data-type="taskList"] li > label > input[type="checkbox"] {
