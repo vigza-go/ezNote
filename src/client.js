@@ -5,6 +5,7 @@ import { Placeholder } from '@tiptap/extension-placeholder'
 import { Collaboration } from '@tiptap/extension-collaboration'
 import { BubbleMenu } from '@tiptap/extension-bubble-menu'
 import { Underline } from '@tiptap/extension-underline'
+import { TaskList, TaskItem } from '@tiptap/extension-list'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 
@@ -263,6 +264,10 @@ const initEditor = () => {
                 underline: false,
             }),
             Underline,
+            TaskList,
+            TaskItem.configure({
+                nested: true,
+            }),
             Image.configure({
                 inline: false,
                 allowBase64: false,
