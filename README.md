@@ -59,3 +59,16 @@ data/
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | PORT | 3000 | 服务器端口 |
+| AUTH_USER | vigza | 登录用户名 |
+| AUTH_PASS | （必填） | 登录密码，未设置则无法登录 |
+| AUTH_TOKEN | （必填） | API 鉴权 token |
+| WEBDAV_URL | （空） | WebDAV 备份地址，留空则跳过备份 |
+| WEBDAV_USER | （空） | WebDAV 用户名 |
+| WEBDAV_PASSWORD | （空） | WebDAV 密码 |
+| BACKUP_NAME | ezNote-backup | 备份文件名 |
+| ENABLE_BACKUP | true | 是否启用备份 |
+
+**本地开发**：复制 `.env.example` 为 `.env` 并填写（`.env` 已被 git 忽略），`npm start` / `npm run dev` 会自动读取。
+
+**生产部署**：真实值写在 `ecosystem.config.js` 的 `env` 里（该文件同样不入库），用
+`pm2 restart ecosystem.config.js --update-env` 重启才会生效。

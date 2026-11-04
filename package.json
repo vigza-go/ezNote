@@ -5,8 +5,8 @@
   "main": "server.js",
   "scripts": {
     "build": "node build.js",
-    "start": "node server.js",
-    "dev": "node build.js && node server.js"
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node build.js && node --env-file-if-exists=.env server.js"
   },
   "keywords": [
     "note",
