@@ -8,6 +8,7 @@ import { Underline } from '@tiptap/extension-underline'
 import { TaskList, TaskItem } from '@tiptap/extension-list'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
+import { initDaily, closeDaily, isDailyActive } from './daily.js'
 
 const API_BASE = ''
 const AUTH_TOKEN_KEY = 'eznote-auth-token'
@@ -105,6 +106,7 @@ async function fetchNotes() {
         notes = await res.json()
         hideLoginScreen()
         renderNotesList()
+        initDaily()
     } catch (err) {
         console.error('获取笔记失败:', err)
     }
@@ -177,6 +179,7 @@ function destroyEditor() {
 }
 
 async function selectNote(id) {
+    if (isDailyActive()) closeDaily()
     if (currentNoteId === id) return
     destroyEditor()
     currentNoteId = id
@@ -384,6 +387,7 @@ function goBackToList() {
 }
 
 async function createNote() {
+    if (isDailyActive()) closeDaily()
     try {
         const res = await fetch(`${API_BASE}/api/notes`, {
             method: 'POST',

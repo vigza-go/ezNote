@@ -11,6 +11,7 @@
 - **图文**：支持粘贴/拖拽上传图片，图片独立存储
 - **美观**：现代化 UI，支持暗色模式
 - **备份**：支持webdav自动备份
+- **日报**：独立的每日清单模块，按天记录 + 多日总览表格，与笔记系统互不干扰
 
 ## 快速开始
 
@@ -34,8 +35,25 @@ npm run dev
 data/
 ├── notes/     # 笔记 JSON 文件
 ├── images/    # 上传的图片
-└── yjs/      # Yjs 协同状态文件
+├── yjs/       # Yjs 协同状态文件
+└── daily/     # 日报，一天一个文件，如 2026-11-08.json
 ```
+
+日报文件格式（只有内容，没有 CRDT）：
+
+```json
+{
+  "date": "2026-11-08",
+  "sections": [
+    { "key": "done",  "title": "今日完成", "items": [{ "text": "修 gkd 脚本", "checked": true }] },
+    { "key": "plan",  "title": "明日计划", "items": [] },
+    { "key": "issue", "title": "问题与思考", "items": [] }
+  ],
+  "updatedAt": "2026-11-08T08:00:00.000Z"
+}
+```
+
+三栏全空时不落盘（自动删文件），所以目录里只有真正记录过的日期。
 
 ## API 接口
 
@@ -47,11 +65,16 @@ data/
 | PUT | /api/notes/:id | 更新笔记 |
 | DELETE | /api/notes/:id | 删除笔记 |
 | POST | /api/upload | 上传图片 |
+| GET | /api/daily/:date | 读取某天日报，不存在返回空骨架 |
+| PUT | /api/daily/:date | 保存某天日报 |
+| DELETE | /api/daily/:date | 删除某天日报 |
+| GET | /api/daily?to=&days= | 区间查询，给总览表用（days 默认 14，上限 366） |
+| GET | /api/daily/dates | 已有记录的日期列表 |
 
 ## 技术栈
 
 - **后端**：Node.js, y-websocket, yjs
-- **前端**：Tiptap, ProseMirror, esbuild
+- **前端**：Tiptap, ProseMirror, rollup（日报模块为原生 DOM，不依赖 Tiptap）
 - **存储**：JSON 文件 + 本地图片目录
 
 ## 环境变量

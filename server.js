@@ -10,6 +10,7 @@ const encoding = require('lib0/encoding')
 const decoding = require('lib0/decoding')
 const syncProtocol = require('y-protocols/sync')
 const awarenessProtocol = require('y-protocols/awareness')
+const { createDailyRouter } = require('./daily')
 
 const PORT = process.env.PORT || 3000
 const NOTES_DIR = path.join(__dirname, 'data', 'notes')
@@ -443,6 +444,8 @@ function verifyToken(req) {
     return authHeader === AUTH_TOKEN
 }
 
+const dailyRoute = createDailyRouter({ sendJSON, sendCompressedJSON, readBody })
+
 
 const IMAGE_EXTENSIONS = {
     'image/jpeg': '.jpg',
@@ -488,6 +491,9 @@ const server = http.createServer(async (req, res) => {
             sendJSON(res, 401, { error: '请先登录' })
             return
         }
+
+        // 日报模块（与笔记系统完全独立）
+        if (await dailyRoute(req, res, pathname, url)) return
 
         if (pathname.startsWith('/images/')) {
             const imageName = pathname.slice(8)
