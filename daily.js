@@ -12,10 +12,11 @@ const MAX_TITLE_LEN = 40
 const MAX_RANGE_DAYS = 366
 const MAX_BODY_SIZE = 512 * 1024
 
+// type: 'list' 清单 / 'text' 自由文本
 const DEFAULT_SECTIONS = [
-    { key: 'done', title: '今日完成' },
-    { key: 'plan', title: '明日计划' },
-    { key: 'issue', title: '问题与思考' },
+    { key: 'done', title: '今日完成', type: 'list' },
+    { key: 'plan', title: '明日计划', type: 'list' },
+    { key: 'issue', title: '问题与思考', type: 'text' },
 ]
 
 if (!fs.existsSync(DAILY_DIR)) fs.mkdirSync(DAILY_DIR, { recursive: true })
@@ -41,6 +42,27 @@ function sanitizeSections(raw) {
         if (!key || usedKeys.has(key)) continue
         usedKeys.add(key)
 
+        const known = DEFAULT_SECTIONS.find(d => d.key === key)
+        const type = sec.type === 'text' || (known && known.type === 'text') ? 'text' : 'list'
+        const fallbackTitle = known ? known.title : key
+        const title = typeof sec.title === 'string' && sec.title.trim()
+            ? sec.title.trim().slice(0, MAX_TITLE_LEN)
+            : fallbackTitle
+
+        if (type === 'text') {
+            // text 栏只存一段字符串；兼容旧数据里被当清单写的 items
+            let text = typeof sec.text === 'string' ? sec.text.slice(0, MAX_TEXT_LEN) : ''
+            if (!text && Array.isArray(sec.items)) {
+                text = sec.items
+                    .map(it => (it && typeof it.text === 'string') ? it.text : '')
+                    .filter(Boolean)
+                    .join('\n')
+                    .slice(0, MAX_TEXT_LEN)
+            }
+            out.push({ key, title, type: 'text', text })
+            continue
+        }
+
         const items = []
         if (Array.isArray(sec.items)) {
             for (const it of sec.items.slice(0, MAX_ITEMS_PER_SECTION)) {
@@ -51,13 +73,7 @@ function sanitizeSections(raw) {
             }
         }
 
-        const known = DEFAULT_SECTIONS.find(d => d.key === key)
-        const fallbackTitle = known ? known.title : key
-        const title = typeof sec.title === 'string' && sec.title.trim()
-            ? sec.title.trim().slice(0, MAX_TITLE_LEN)
-            : fallbackTitle
-
-        out.push({ key, title, items })
+        out.push({ key, title, type: 'list', items })
     }
     return out
 }
@@ -68,7 +84,10 @@ function ensureDefaults(sections) {
     const map = new Map(sections.map(s => [s.key, s]))
     const base = DEFAULT_SECTIONS.map(d => {
         const found = map.get(d.key)
-        return { key: d.key, title: d.title, items: found ? found.items : [] }
+        if (d.type === 'text') {
+            return { key: d.key, title: d.title, type: 'text', text: found ? (found.text || '') : '' }
+        }
+        return { key: d.key, title: d.title, type: 'list', items: found ? found.items : [] }
     })
     const extra = sections.filter(s => !DEFAULT_SECTIONS.some(d => d.key === s.key))
     return base.concat(extra)
@@ -159,7 +178,9 @@ function createDailyRouter({ sendJSON, sendCompressedJSON, readBody }) {
         }
 
         // 三栏全空视为没有记录，直接删文件，保持 data/daily 干净
-        const isEmpty = daily.sections.every(s => s.items.length === 0)
+        const isEmpty = daily.sections.every(s =>
+            s.type === 'text' ? !s.text.trim() : s.items.length === 0
+        )
         if (isEmpty) {
             try { await fsp.unlink(dailyPath(date)) } catch { }
             sendJSON(res, 200, { ...daily, updatedAt: null })

@@ -10,9 +10,9 @@ const SAVE_DEBOUNCE_MS = 800
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const DEFAULT_SECTIONS = [
-    { key: 'done', title: '今日完成' },
-    { key: 'plan', title: '明日计划' },
-    { key: 'issue', title: '问题与思考' },
+    { key: 'done', title: '今日完成', type: 'list' },
+    { key: 'plan', title: '明日计划', type: 'list' },
+    { key: 'issue', title: '问题与思考', type: 'text' },
 ]
 
 let currentDate = todayStr()
@@ -64,6 +64,11 @@ function weekdayOf(dateStr) {
     return WEEKDAYS[new Date(y, m - 1, d).getDay()]
 }
 
+function autoGrow(ta) {
+    ta.style.height = 'auto'
+    ta.style.height = `${ta.scrollHeight}px`
+}
+
 function escapeHtml(str) {
     return String(str == null ? '' : str)
         .replace(/&/g, '&amp;')
@@ -76,7 +81,11 @@ function escapeHtml(str) {
 function emptyDay(date) {
     return {
         date,
-        sections: DEFAULT_SECTIONS.map(s => ({ key: s.key, title: s.title, items: [] })),
+        sections: DEFAULT_SECTIONS.map(s => (
+            s.type === 'text'
+                ? { key: s.key, title: s.title, type: 'text', text: '' }
+                : { key: s.key, title: s.title, type: 'list', items: [] }
+        )),
         updatedAt: null,
     }
 }
@@ -97,6 +106,10 @@ function cacheEl() {
     el.pickDate = document.getElementById('dailyPickDate')
     el.overviewBtn = document.getElementById('dailyOverviewBtn')
     el.backBtn = document.getElementById('dailyBack')
+    el.notesPane = document.getElementById('notesPane')
+    el.dailyPane = document.getElementById('dailyPane')
+    el.dateList = document.getElementById('dailyDateList')
+    el.jumpToday = document.getElementById('dailyJumpToday')
     el.sections = document.getElementById('dailySections')
     el.overview = document.getElementById('dailyOverview')
     el.overviewHead = document.getElementById('dailyOverviewHead')
@@ -124,14 +137,18 @@ async function saveNow() {
     setHint('保存中…')
 
     const payload = {
-        sections: current.sections.map(s => ({
-            key: s.key,
-            title: s.title,
-            items: s.items.filter(it => it.text.trim()).map(it => ({
-                text: it.text,
-                checked: !!it.checked,
-            })),
-        })),
+        sections: current.sections.map(s => s.type === 'text'
+            ? { key: s.key, title: s.title, type: 'text', text: s.text || '' }
+            : {
+                key: s.key,
+                title: s.title,
+                type: 'list',
+                items: s.items.filter(it => it.text.trim()).map(it => ({
+                    text: it.text,
+                    checked: !!it.checked,
+                })),
+            }
+        ),
     }
 
     try {
@@ -144,6 +161,7 @@ async function saveNow() {
             const data = await res.json()
             current.updatedAt = data.updatedAt
             setHint(data.updatedAt ? '已保存' : '')
+            refreshDateList()
         } else {
             setHint('保存失败')
             dirty = true
@@ -192,41 +210,119 @@ function itemHtml(item, idx) {
 }
 
 function sectionHtml(sec) {
+    const isText = sec.type === 'text'
     return `
-        <div class="daily-section" data-key="${escapeHtml(sec.key)}">
+        <div class="daily-section" data-key="${escapeHtml(sec.key)}" data-type="${isText ? 'text' : 'list'}">
             <div class="daily-section-head">
                 <input type="text" class="daily-section-title" value="${escapeHtml(sec.title)}" maxlength="40">
             </div>
-            <div class="daily-items"></div>
-            <button class="daily-add" type="button">+ 添加一条</button>
+            ${isText
+                ? `<textarea class="daily-textarea" placeholder="随便写点…">${escapeHtml(sec.text || '')}</textarea>`
+                : `<div class="daily-items"></div><button class="daily-add" type="button">+ 添加一条</button>`}
         </div>
     `
 }
 
 function renderItems(key) {
     const sec = sectionByKey(key)
+    if (!sec || sec.type === 'text') return
     const secEl = el.sections.querySelector(`.daily-section[data-key="${key}"]`)
-    if (!sec || !secEl) return
+    if (!secEl) return
     const box = secEl.querySelector('.daily-items')
+    if (!box) return
     box.innerHTML = sec.items.map(itemHtml).join('')
 }
 
 function renderDay() {
     el.dateTitle.textContent = dateLabel(current.date)
     el.pickDate.value = current.date
-    // 每栏至少留一个空输入行，方便直接开始写
+    // 清单栏至少留一个空输入行，方便直接开始写
     current.sections.forEach(s => {
-        if (s.items.length === 0) s.items.push({ text: '', checked: false })
+        if (s.type === 'text') {
+            if (typeof s.text !== 'string') s.text = ''
+        } else {
+            if (!Array.isArray(s.items)) s.items = []
+            if (s.items.length === 0) s.items.push({ text: '', checked: false })
+        }
     })
     el.sections.innerHTML = current.sections.map(sectionHtml).join('')
     current.sections.forEach(s => renderItems(s.key))
+    el.sections.querySelectorAll('.daily-textarea').forEach(autoGrow)
     syncEmptyState()
 }
 
 // 完全没有内容时给个提示条（仍可输入）
 function syncEmptyState() {
-    const hasAny = current.sections.some(s => s.items.some(i => i.text.trim()))
+    const hasAny = current.sections.some(s =>
+        s.type === 'text' ? !!(s.text || '').trim() : s.items.some(i => i.text.trim())
+    )
     el.sections.classList.toggle('is-empty', !hasAny)
+}
+
+let dateCounts = new Map()
+
+async function refreshDateList() {
+    if (!el.dateList) return
+    let dates = []
+    try {
+        const res = await fetch(`${API_BASE}/api/daily/dates`, { headers: authHeaders() })
+        if (res.ok) dates = await res.json()
+    } catch { }
+
+    // 拉近一个月的记录，统计每条日期有几项，给列表加个数量提示
+    dateCounts = new Map()
+    try {
+        const to = todayStr()
+        const res = await fetch(`${API_BASE}/api/daily?to=${to}&days=60`, { headers: authHeaders() })
+        if (res.ok) {
+            const list = await res.json()
+            list.forEach(d => {
+                let n = 0
+                d.sections.forEach(s => {
+                    n += s.type === 'text'
+                        ? ((s.text || '').trim() ? 1 : 0)
+                        : s.items.filter(it => it.text.trim()).length
+                })
+                dateCounts.set(d.date, n)
+            })
+        }
+    } catch { }
+
+    renderDateList(dates)
+}
+
+function renderDateList(dates) {
+    if (!el.dateList) return
+
+    // 当前正在看的那天，即使还没记录也要出现在列表里
+    const all = [...new Set([...dates, currentDate, todayStr()])]
+        .filter(d => d)
+        .sort()
+        .reverse()
+
+    if (all.length === 0) {
+        el.dateList.innerHTML = '<div class="daily-date-empty">还没有记录<br>点上方「写今天」开始</div>'
+        return
+    }
+
+    el.dateList.innerHTML = all.map(d => {
+        const n = dateCounts.get(d) || 0
+        const [y, m, dd] = d.split('-').map(Number)
+        return `
+            <div class="daily-date-item ${d === currentDate ? 'active' : ''}" data-date="${d}">
+                <span class="dd-date">${m}月${dd}日</span>
+                <span class="dd-weekday">${WEEKDAYS[new Date(y, m - 1, dd).getDay()]}</span>
+                ${n > 0 ? `<span class="dd-count">${n} 条</span>` : ''}
+            </div>
+        `
+    }).join('')
+
+    el.dateList.querySelectorAll('.daily-date-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (item.dataset.date === currentDate) return
+            openDay(item.dataset.date)
+        })
+    })
 }
 
 async function openDay(date) {
@@ -237,6 +333,19 @@ async function openDay(date) {
     dirty = false
     renderDay()
     setHint('')
+    highlightDate()
+}
+
+function highlightDate() {
+    if (!el.dateList) return
+    let hit = null
+    el.dateList.querySelectorAll('.daily-date-item').forEach(item => {
+        const on = item.dataset.date === currentDate
+        item.classList.toggle('active', on)
+        if (on) hit = item
+    })
+    if (!hit) refreshDateList()
+    else if (hit.scrollIntoView) hit.scrollIntoView({ block: 'nearest' })
 }
 
 function focusItem(secKey, idx) {
@@ -253,6 +362,17 @@ function bindSections() {
         const secEl = e.target.closest('.daily-section')
         if (!secEl) return
         const key = secEl.dataset.key
+
+        if (e.target.classList.contains('daily-textarea')) {
+            const sec = sectionByKey(key)
+            if (sec) {
+                sec.text = e.target.value
+                autoGrow(e.target)
+                scheduleSave()
+                syncEmptyState()
+            }
+            return
+        }
 
         if (e.target.classList.contains('daily-item-input')) {
             const idx = Number(e.target.closest('.daily-item').dataset.idx)
@@ -450,7 +570,17 @@ async function renderOverview() {
     el.overviewBody.innerHTML = rows.map(({ date, day }) => {
         const cells = cols.map(c => {
             const sec = day ? day.sections.find(s => s.key === c.key) : null
-            const items = sec ? sec.items.filter(it => it.text.trim()) : []
+            if (!sec) return '<td class="cell-empty">—</td>'
+
+            // 自由文本栏：折行显示一段文字
+            if (sec.type === 'text') {
+                const text = (sec.text || '').trim()
+                if (!text) return '<td class="cell-empty">—</td>'
+                const clipped = text.length > 80 ? `${text.slice(0, 80)}…` : text
+                return `<td><div class="ov-text-block">${escapeHtml(clipped).replace(/\n/g, '<br>')}</div></td>`
+            }
+
+            const items = sec.items.filter(it => it.text.trim())
             if (items.length === 0) return '<td class="cell-empty">—</td>'
             const shown = items.slice(0, 4).map(it => `
                 <div class="ov-item ${it.checked ? 'checked' : ''}">
@@ -493,6 +623,9 @@ export function openDaily() {
     el.notesBtn.classList.remove('active')
     el.dailyBtn.classList.add('active')
     document.getElementById('app').classList.add('daily-mode')
+    el.notesPane.classList.add('hidden')
+    el.dailyPane.classList.remove('hidden')
+    refreshDateList()
     if (!current) openDay(currentDate)
 }
 
@@ -505,6 +638,8 @@ export function closeDaily() {
     el.dailyBtn.classList.remove('active')
     el.notesBtn.classList.add('active')
     document.getElementById('app').classList.remove('daily-mode')
+    el.dailyPane.classList.add('hidden')
+    el.notesPane.classList.remove('hidden')
 }
 
 export function isDailyActive() {
@@ -521,6 +656,7 @@ export function initDaily() {
     })
     el.dailyBtn.addEventListener('click', () => openDaily())
     el.backBtn.addEventListener('click', () => closeDaily())
+    el.jumpToday.addEventListener('click', () => openDay(todayStr()))
 
     el.prevBtn.addEventListener('click', () => openDay(shiftDate(currentDate, -1)))
     el.nextBtn.addEventListener('click', () => openDay(shiftDate(currentDate, 1)))
