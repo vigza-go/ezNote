@@ -59,9 +59,19 @@ function shortDate(dateStr) {
     return `${Number(m)}月${Number(d)}日`
 }
 
-function weekdayOf(dateStr) {
+function weekdayIndex(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number)
-    return WEEKDAYS[new Date(y, m - 1, d).getDay()]
+    return new Date(y, m - 1, d).getDay()
+}
+
+function weekdayOf(dateStr) {
+    return WEEKDAYS[weekdayIndex(dateStr)]
+}
+
+// 带颜色标记的星期几，颜色由 CSS 里 --wd-0…--wd-6 决定
+function weekdayTag(dateStr, cls) {
+    const idx = weekdayIndex(dateStr)
+    return `<span class="${cls} wd-${idx}">${WEEKDAYS[idx]}</span>`
 }
 
 function autoGrow(ta) {
@@ -289,7 +299,12 @@ function renderItems(key) {
 }
 
 function renderDay() {
-    el.dateTitle.textContent = dateLabel(current.date)
+    const [dy, dm, dd] = current.date.split('-').map(Number)
+    const isTodayLabel = current.date === todayStr()
+    el.dateTitle.innerHTML =
+        `${dm}月${dd}日 ` +
+        weekdayTag(current.date, 'wd-label') +
+        (isTodayLabel ? ' <span class="today-badge">今天</span>' : '')
     el.pickDate.value = current.date
     // 清单栏至少留一个空输入行，方便直接开始写
     current.sections.forEach(s => {
@@ -366,7 +381,7 @@ function renderDateList(dates) {
         return `
             <div class="daily-date-item ${!overviewOpen && d === currentDate ? 'active' : ''}" data-date="${d}">
                 <span class="dd-date">${m}月${dd}日</span>
-                <span class="dd-weekday">${WEEKDAYS[new Date(y, m - 1, dd).getDay()]}</span>
+                ${weekdayTag(d, 'dd-weekday')}
                 ${n > 0 ? `<span class="dd-count">${n} 条</span>` : ''}
             </div>
         `
@@ -667,7 +682,7 @@ async function renderOverview() {
             <tr class="${rowClass}" data-date="${date}">
                 <td class="col-date">
                     <div class="ov-date">${shortDate(date)}</div>
-                    <div class="ov-weekday">${weekdayOf(date)}</div>
+                    <div class="ov-weekday-row">${weekdayTag(date, 'ov-weekday')}</div>
                 </td>
                 ${cells}
             </tr>

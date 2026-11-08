@@ -28,6 +28,14 @@
             --danger-color: #e74c3c;
             --success-color: #2e9e5b;
             --checkbox-border: #c4c4c4;
+            /* 一周七天的颜色：周日红 → 周六紫 */
+            --wd-0: #d9483f;
+            --wd-1: #c2691c;
+            --wd-2: #a8880a;
+            --wd-3: #2f8a4e;
+            --wd-4: #16878f;
+            --wd-5: #2f6fd0;
+            --wd-6: #8a52c8;
             --toolbar-bg: #fff;
             --toolbar-border: #e0e0e0;
             --toolbar-shadow: rgba(0,0,0,0.08);
@@ -52,6 +60,13 @@
             --danger-color: #f14c4c;
             --success-color: #4ec9b0;
             --checkbox-border: #6a6a6a;
+            --wd-0: #f0756c;
+            --wd-1: #e39a4e;
+            --wd-2: #d4bd4a;
+            --wd-3: #63c07f;
+            --wd-4: #4cb3bb;
+            --wd-5: #6f9de8;
+            --wd-6: #b08ae0;
             --toolbar-bg: #2d2d2d;
             --toolbar-border: #3c3c3c;
             --toolbar-shadow: rgba(0,0,0,0.3);
@@ -243,7 +258,7 @@
         }
         .daily-date-item .dd-weekday {
             font-size: 11px;
-            color: var(--text-muted);
+            font-weight: 600;
         }
         .daily-date-item .dd-count {
             margin-left: auto;
@@ -301,6 +316,27 @@
         }
         .daily-nav-btn:hover { background: var(--bg-hover); }
 
+        /* 星期几着色 */
+        .wd-0 { color: var(--wd-0); }
+        .wd-1 { color: var(--wd-1); }
+        .wd-2 { color: var(--wd-2); }
+        .wd-3 { color: var(--wd-3); }
+        .wd-4 { color: var(--wd-4); }
+        .wd-5 { color: var(--wd-5); }
+        .wd-6 { color: var(--wd-6); }
+
+        .today-badge {
+            display: inline-block;
+            margin-left: 2px;
+            padding: 1px 7px;
+            border-radius: 20px;
+            background: var(--bg-active);
+            color: var(--accent-color);
+            font-size: 11px;
+            font-weight: 600;
+            vertical-align: 2px;
+        }
+
         .daily-back-btn {
             display: none;
             align-items: center;
@@ -322,7 +358,11 @@
             color: var(--text-primary);
             min-width: 190px;
             padding: 0 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
+        .wd-label { font-weight: 700; }
 
         .daily-date-picker {
             border: 1px solid var(--border-color);
@@ -624,7 +664,8 @@
         .daily-table .col-date { width: 96px; white-space: nowrap; }
 
         .ov-date { font-weight: 600; font-size: 13px; }
-        .ov-weekday { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+        .ov-weekday-row { margin-top: 1px; }
+        .ov-weekday { font-size: 11px; font-weight: 600; }
 
         .ov-item {
             display: flex;
@@ -1233,6 +1274,6 @@
     </div>
 
     <script type="module" src="/chunks/vendor-N-wLZhEj.js"></script>
-    <script type="module" src="/chunks/client-C-DUdXgp.js"></script>
+    <script type="module" src="/chunks/client-DByPF0ge.js"></script>
 </body>
 </html>
