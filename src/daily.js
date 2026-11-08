@@ -119,6 +119,61 @@ function cacheEl() {
 
 // ---------- 数据 ----------
 
+// 默认栏的类型由前端说了算：后端返回旧格式（没有 type 字段）也能正确渲染
+function normalizeDay(day, date) {
+    const raw = Array.isArray(day.sections) ? day.sections : []
+    const byKey = new Map(raw.map(s => [s.key, s]))
+
+    const sections = DEFAULT_SECTIONS.map(def => {
+        const found = byKey.get(def.key)
+        if (def.type === 'text') {
+            let text = ''
+            if (found) {
+                if (typeof found.text === 'string') {
+                    text = found.text
+                } else if (Array.isArray(found.items)) {
+                    // 旧数据里这一段被当成清单写的，拼回文本
+                    text = found.items
+                        .map(it => (it && typeof it.text === 'string') ? it.text : '')
+                        .filter(Boolean)
+                        .join('\n')
+                }
+            }
+            return { key: def.key, title: def.title, type: 'text', text }
+        }
+        const items = (found && Array.isArray(found.items)) ? found.items
+            .filter(it => it && typeof it === 'object')
+            .map(it => ({
+                text: typeof it.text === 'string' ? it.text : '',
+                checked: it.checked === true,
+            })) : []
+        return { key: def.key, title: def.title, type: 'list', items }
+    })
+
+    // 用户自建的额外栏：逐个保持原样
+    raw.forEach(sec => {
+        if (!sec || DEFAULT_SECTIONS.some(d => d.key === sec.key)) return
+        const isText = sec.type === 'text'
+        sections.push(isText
+            ? { key: sec.key, title: sec.title || sec.key, type: 'text', text: sec.text || '' }
+            : {
+                key: sec.key,
+                title: sec.title || sec.key,
+                type: 'list',
+                items: Array.isArray(sec.items) ? sec.items.map(it => ({
+                    text: (it && it.text) || '',
+                    checked: !!(it && it.checked),
+                })) : [],
+            })
+    })
+
+    return {
+        date: day.date || date,
+        sections,
+        updatedAt: day.updatedAt || null,
+    }
+}
+
 async function loadDay(date) {
     const res = await fetch(`${API_BASE}/api/daily/${date}`, { headers: authHeaders() })
     if (res.status === 401) {
@@ -127,7 +182,7 @@ async function loadDay(date) {
         return null
     }
     if (!res.ok) return emptyDay(date)
-    return await res.json()
+    return normalizeDay(await res.json(), date)
 }
 
 async function saveNow() {
@@ -309,7 +364,7 @@ function renderDateList(dates) {
         const n = dateCounts.get(d) || 0
         const [y, m, dd] = d.split('-').map(Number)
         return `
-            <div class="daily-date-item ${d === currentDate ? 'active' : ''}" data-date="${d}">
+            <div class="daily-date-item ${!overviewOpen && d === currentDate ? 'active' : ''}" data-date="${d}">
                 <span class="dd-date">${m}月${dd}日</span>
                 <span class="dd-weekday">${WEEKDAYS[new Date(y, m - 1, dd).getDay()]}</span>
                 ${n > 0 ? `<span class="dd-count">${n} 条</span>` : ''}
@@ -319,6 +374,11 @@ function renderDateList(dates) {
 
     el.dateList.querySelectorAll('.daily-date-item').forEach(item => {
         item.addEventListener('click', () => {
+            if (overviewOpen) {
+                closeOverview()
+                openDay(item.dataset.date)
+                return
+            }
             if (item.dataset.date === currentDate) return
             openDay(item.dataset.date)
         })
@@ -337,7 +397,7 @@ async function openDay(date) {
 }
 
 function highlightDate() {
-    if (!el.dateList) return
+    if (!el.dateList || overviewOpen) return
     let hit = null
     el.dateList.querySelectorAll('.daily-date-item').forEach(item => {
         const on = item.dataset.date === currentDate
@@ -516,6 +576,11 @@ async function openOverview() {
     el.overview.classList.remove('hidden')
     el.sections.classList.add('hidden')
     el.overviewBtn.classList.add('active')
+    el.dailyContainer.classList.add('overview-mode')
+    // 总览是区间视图，左侧列表不再高亮某一天
+    if (el.dateList) {
+        el.dateList.querySelectorAll('.daily-date-item').forEach(i => i.classList.remove('active'))
+    }
     await renderOverview()
 }
 
@@ -524,6 +589,9 @@ function closeOverview() {
     el.overview.classList.add('hidden')
     el.sections.classList.remove('hidden')
     el.overviewBtn.classList.remove('active')
+    el.dailyContainer.classList.remove('overview-mode')
+    highlightDate()
+    refreshDateList()
 }
 
 async function fetchRange(days) {

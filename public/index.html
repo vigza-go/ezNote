@@ -336,6 +336,21 @@
             outline: none;
     }
 
+        /* 总览模式：隐藏单日导航（区间视图里「某一天」没有意义） */
+        .daily-container.overview-mode .daily-nav,
+        .daily-container.overview-mode .daily-date-title,
+        .daily-container.overview-mode .daily-date-picker,
+        .daily-container.overview-mode #dailyToday { display: none; }
+
+        .daily-overview-title {
+            display: none;
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-primary);
+            padding: 0 4px;
+        }
+        .daily-container.overview-mode .daily-overview-title { display: block; }
+
         .daily-header-right {
             margin-left: auto;
             display: flex;
@@ -1140,6 +1155,7 @@
                     <button class="daily-nav-btn" id="dailyNext" title="后一天">›</button>
                 </div>
                 <div class="daily-date-title" id="dailyDateTitle"></div>
+                <div class="daily-overview-title">总览</div>
                 <input type="date" class="daily-date-picker" id="dailyPickDate">
                 <div class="daily-header-right">
                     <span class="daily-save-hint" id="dailySaveHint"></span>
@@ -1217,6 +1233,6 @@
     </div>
 
     <script type="module" src="/chunks/vendor-N-wLZhEj.js"></script>
-    <script type="module" src="/chunks/client-BYD0Dysb.js"></script>
+    <script type="module" src="/chunks/client-C-DUdXgp.js"></script>
 </body>
 </html>
